@@ -1,30 +1,60 @@
-#**LLM Agent Proof-of-Concept**
-This is a minimal, browser-based LLM agent designed to demonstrate multi-tool reasoning. The application takes user input, queries a mock LLM for a response and potential tool calls, and then executes those tools in a continuous loop until the task is complete.
+# Browser LLM Agent POC — Multi-Tool Reasoning
 
-##**Overview**
-The primary goal of this project is to showcase the core logic of a modern LLM agent's reasoning loop entirely within a single, client-side web page. It serves as a proof-of-concept for how an agent can dynamically decide to perform actions beyond simple text generation, such as searching the web or running code.
+**Deliverable summary**  
+A minimal browser JavaScript app + server proxy that implements a looped LLM agent using OpenAI-style function/tool calls and three tool integrations:
 
-##**Features**
-The agent supports the following tool integrations, which are called based on the mock LLM's response:
+- **Google Search snippets** (browser or server-backed via proxy)
+- **AI Pipe** (server-side proxy; secret kept in `.env`)
+- **JS code execution** (sandboxed; worker in browser for safety; server-side fallback exists)
 
-###**Google Search Simulation:** Simulates fetching search results for a given query.
+UI uses Bootstrap alerts for errors and a simple chat window. The front-end only calls `/api/tools` so secrets never reach the browser.
 
-###**AI Pipe Simulation:** Processes a data string, demonstrating how the agent could interface with a pipelined API. A hard-coded token is used to illustrate an authentication requirement.
+---
 
-###**JavaScript Code Execution:** Safely runs agent-generated JavaScript code in a sandboxed environment within the browser, capturing and displaying any console output.
+## Files
+- `server.js` — Express unified `/api/tools` proxy (chat, search, aipipe, code execution)
+- `static/index.html` — Browser agent UI (single-file, minimal)
+- `.env.example` — example env keys to create `.env`
+- `package.json` — minimal scripts to run
+- `.gitignore` — ignores `node_modules` and `.env`
 
-##**How to Use**
--To use this application, simply save the file locally as index.html and open it in a web browser. The application is entirely self-contained and requires no external dependencies or a web server to run.
+---
 
--To trigger the reasoning loop and tool calls, use the following conversational prompts:
+## Quick start (local)
 
--"aipipe": Triggers the simulated AI Pipe tool.
+1. Clone repo
+```bash
+git clone https://github.com/<your>/<repo>.git
+cd <repo>
+Install
 
-##**Technical Details**
-The core agent logic is a JavaScript while loop that continuously processes the conversation, checking for tool calls after each LLM response. The application uses a simple state machine to mock the LLM's behavior and tool-calling decisions, demonstrating the reasoning process.
+bash
+Copy code
+npm install
+Create .env (based on .env.example)
 
-###UI: Built with basic HTML and styled with Tailwind CSS for a clean, modern look.
+bash
+Copy code
+cp .env.example .env
+# Edit .env and put your real secrets
+.env variables:
 
-###Agent API: The mock LLM interface follows the OpenAI-style tool-calling format.
+ini
+Copy code
+PORT=3000
+OPENAI_API_KEY=sk-...
+AIPIPE_BASE_URL=https://api.aipipe.com
+AIPIPE_API_KEY=Bearer sk-...
+GOOGLE_API_KEY=AIza...
+GOOGLE_CX=xxxxxxxx
+Start server
 
-###Security: For simplicity, the AIPIPE_TOKEN is hard-coded. For a real-world application, this token would be stored securely on a backend server.
+bash
+Copy code
+node server.js
+Open browser:
+
+arduino
+Copy code
+http://localhost:3000
+Type a task; the agent will loop and call tools (Google, AI Pipe, JS exec) as requested.
