@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Agent POC</title>
+    <!-- Use Tailwind CSS for clean, modern styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                },
+            },
+        };
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-white rounded-xl shadow-2xl overflow-hidden w-full max-w-2xl flex flex-col h-[80vh]">
+        
+        <!-- Header -->
+        <div class="bg-blue-600 text-white p-4 flex items-center justify-between">
+            <h1 class="text-xl font-bold">LLM Agent POC</h1>
+            <select id="model-picker" class="bg-blue-700 text-white rounded-lg p-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+                <option value="gemini-flash">gemini-flash-05-20</option>
+                <!-- Other models could be added here -->
+            </select>
+        </div>
+
+        <!-- Alert/Error UI -->
+        <div id="alert-container" class="p-4" style="display: none;">
+            <div id="agent-alert" class="flex items-center bg-red-100 text-red-700 p-3 rounded-lg shadow-sm" role="alert">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mr-2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.195 3.374 1.945 3.374h14.71c1.75 0 2.813-1.874 1.945-3.374L15.483 8.35a1.867 1.867 0 0 0-3.166 0L12 9zm.002-8.5a.75.75 0 1 1 0 1.5a.75.75 0 0 1 0-1.5z" />
+                </svg>
+                <span id="alert-message"></span>
+            </div>
+        </div>
+        
+        <!-- Conversation Window -->
+        <div id="chat-window" class="flex-1 p-6 overflow-y-auto space-y-4">
+            <!-- Initial greeting message from the agent -->
+            <div class="flex items-start">
+                <div class="bg-gray-200 text-gray-800 p-3 rounded-xl max-w-xs shadow-sm">
+                    Hello! I'm a multi-tool LLM agent. What can I help you with today?
+                </div>
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="p-4 border-t border-gray-200 flex items-center space-x-2">
+            <input type="text" id="user-input" placeholder="Type your message..." class="flex-1 p-3 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all">
+            <button id="send-button" class="bg-blue-600 text-white p-3 rounded-full hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-6 h-6">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                </svg>
+            </button>
+        </div>
+
+    </div>
+
+    <script>
+        // Core application logic
+        const chatWindow = document.getElementById('chat-window');
+        const userInput = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+        const alertContainer = document.getElementById('alert-container');
+        const alertMessage = document.getElementById('alert-message');
+
+        // Initial agent message
+        const messages = [{
+            role: 'model',
+            content: "Hello! I'm a multi-tool LLM agent. What can I help you with today?"
+        }];
+
+        // State variables to control the UI
+        let isProcessing = false;
+
+        // Define a constant for the AI Pipe token
+        const AIPIPE_TOKEN = "your_ai_pipe_token_here";
+
+        /**
+         * Simulates an OpenAI-style tool call response from the LLM.
+         * This function contains a pre-programmed sequence to demonstrate the agent's
+         * reasoning loop and tool-calling capabilities as requested in the prompt.
+         * @param {Array} history - The current conversation history.
+         * @returns {Object} An object containing the LLM's text output and an array of tool calls.
+         */
+        async function callLLM(history) {
+            const lastUserMessage = history.filter(m => m.role === 'user').pop()?.content || '';
+
+            // This is a simple state machine to mimic the provided example conversation flow.
+            switch (lastUserMessage.toLowerCase().trim()) {
+                case "interview me to create a blog post.":
+                    return {
+                        output: "Sure! What's the post about?",
+                        tool_calls: []
+                    };
+                case "about ibm":
+                    return {
+                        output: "Let me search for IBM.",
+                        tool_calls: [{
+                            function: {
+                                name: "google_search",
+                                arguments: JSON.stringify({ query: "IBM" })
+                            }
+                        }]
+                    };
+                case "next step, please.":
+                    // After the search result, the agent might decide to use another tool.
+                    // This demonstrates a different tool call.
+                    return {
+                        output: "I can run some JavaScript to process the search results. Let's find out the length of the search snippet.",
+                        tool_calls: [{
+                            function: {
+                                name: "execute_js",
+                                arguments: JSON.stringify({ code: "const searchSnippet = 'IBM is a big company founded in 1911 as the Computing-Tabulating-Recording Company.'; console.log('Snippet length:', searchSnippet.length);" })
+                            }
+                        }]
+                    };
+                default:
+                    if (lastUserMessage.includes("aipipe")) {
+                        return {
+                            output: "I'll call the AI Pipe tool with your input.",
+                            tool_calls: [{
+                                function: {
+                                    name: "aipipe",
+                                    arguments: JSON.stringify({ data: lastUserMessage })
+                                }
+                            }]
+                        };
+                    } else if (lastUserMessage.includes("code")) {
+                        // Example for a generic JS code execution request
+                        return {
+                            output: "Running the JavaScript code for you now.",
+                            tool_calls: [{
+                                function: {
+                                    name: "execute_js",
+                                    arguments: JSON.stringify({ code: "console.log('Hello from a user-requested script!');" })
+                                }
+                            }]
+                        };
+                    } else if (history.some(m => m.content.includes("IBM is a big company founded in"))) {
+                        // This response is triggered after the `google_search` result has been processed.
+                        // It represents the agent providing a summary of the search result.
+                        return {
+                            output: "OK, I found that IBM is a big company founded in 1911 as the Computing-Tabulating-Recording Company. It's an interesting topic for a blog post.",
+                            tool_calls: []
+                        };
+                    }
+                    return {
+                        output: "Sorry, I'm a simple demo agent and I can only handle a few specific requests. Try asking about IBM or the next step.",
+                        tool_calls: []
+                    };
+            }
+        }
+
+        /**
+         * Handles displaying alerts in the UI.
+         * @param {string} message - The message to display.
+         * @param {number} duration - The duration in milliseconds to show the alert.
+         */
+        function showAlert(message, duration = 3000) {
+            alertMessage.textContent = message;
+            alertContainer.style.display = 'block';
+            setTimeout(() => {
+                alertContainer.style.display = 'none';
+            }, duration);
+        }
+
+        /**
+         * Renders the messages in the chat window.
+         */
+        function renderMessages() {
+            chatWindow.innerHTML = ''; // Clear chat window
+            messages.forEach(msg => {
+                const isUser = msg.role === 'user';
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `flex ${isUser ? 'justify-end' : 'justify-start'} items-start`;
+                
+                const bubbleClass = isUser ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-800';
+                
+                const contentDiv = document.createElement('div');
+                contentDiv.className = `${bubbleClass} p-3 rounded-xl max-w-xs shadow-sm`;
+                contentDiv.textContent = msg.content;
+                
+                messageDiv.appendChild(contentDiv);
+                chatWindow.appendChild(messageDiv);
+            });
+            chatWindow.scrollTop = chatWindow.scrollHeight; // Auto-scroll to the bottom
+        }
+
+        /**
+         * Simulates a Google Search API call and returns a mock result.
+         * @param {string} query - The search query.
+         * @returns {Promise<Object>} A promise that resolves with the tool result.
+         */
+        async function google_search({ query }) {
+            console.log(`Tool: Calling Google Search with query: "${query}"`);
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
+            return {
+                name: "google_search",
+                content: "IBM is a big company founded in 1911 as the Computing-Tabulating-Recording Company. It is headquartered in Armonk, New York."
+            };
+        }
+
+        /**
+         * Simulates an AI Pipe API call and returns a mock result.
+         * @param {string} data - The data to process.
+         * @returns {Promise<Object>} A promise that resolves with the tool result.
+         */
+        async function aipipe({ data }) {
+            console.log(`Tool: Calling AI Pipe with data: "${data}" and token: "${AIPIPE_TOKEN}"`);
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
+            
+            if (AIPIPE_TOKEN.length > 0 && AIPIPE_TOKEN !== "your_ai_pipe_token_here") {
+                const processedData = `AI Pipe processed: ${data.toUpperCase()} using token: ${AIPIPE_TOKEN}.`;
+                return {
+                    name: "aipipe",
+                    content: processedData
+                };
+            } else {
+                const errorMessage = `AI Pipe Error: Invalid or missing token. Please update the AIPIPE_TOKEN constant in the code.`;
+                return {
+                    name: "aipipe",
+                    content: errorMessage
+                };
+            }
+        }
+
+        /**
+         * Executes JavaScript code in a sandboxed-like environment using a new Function.
+         * WARNING: This is not a true security sandbox. For production, a more robust solution
+         * like a dedicated worker or a server-side execution environment is required.
+         * @param {string} code - The JavaScript code to execute.
+         * @returns {Promise<Object>} A promise that resolves with the tool result.
+         */
+        async function execute_js({ code }) {
+            console.log(`Tool: Executing JavaScript code: "${code}"`);
+            let output = 'No output.';
+            const originalLog = console.log;
+            
+            // Redirect console.log to capture output
+            console.log = (...args) => {
+                output = args.join(' ');
+            };
+
+            try {
+                // Use a new Function constructor to execute code and isolate its scope.
+                const func = new Function(code);
+                func();
+            } catch (error) {
+                output = `Error during execution: ${error.message}`;
+            } finally {
+                // Restore original console.log
+                console.log = originalLog;
+            }
+            
+            return {
+                name: "execute_js",
+                content: output
+            };
+        }
+
+        // Map tool function names to their actual implementations
+        const tools = {
+            google_search: google_search,
+            aipipe: aipipe,
+            execute_js: execute_js
+        };
+
+        /**
+         * The main agent loop logic.
+         * @param {string} userMessage - The message from the user.
+         */
+        async function runAgent(userMessage) {
+            if (isProcessing) return;
+            isProcessing = true;
+            sendButton.disabled = true;
+            userInput.disabled = true;
+
+            try {
+                // Add user message to history
+                messages.push({ role: 'user', content: userMessage });
+                renderMessages();
+
+                let loopCount = 0;
+                const MAX_LOOPS = 5;
+
+                while (loopCount < MAX_LOOPS) {
+                    // Step 1: Call LLM with the full conversation history
+                    const { output, tool_calls } = await callLLM(messages);
+
+                    // Step 2: Display LLM's text output
+                    if (output) {
+                        messages.push({ role: 'model', content: output });
+                        renderMessages();
+                    }
+
+                    // Step 3: Check for tool calls
+                    if (tool_calls && tool_calls.length > 0) {
+                        // Process each tool call
+                        for (const toolCall of tool_calls) {
+                            const { name, arguments } = toolCall.function;
+                            const args = JSON.parse(arguments);
+                            
+                            if (tools[name]) {
+                                // Execute the tool and add its result to the history
+                                const toolResult = await tools[name](args);
+                                messages.push({ role: 'tool', name: toolResult.name, content: toolResult.content });
+                                renderMessages();
+                            } else {
+                                // Handle case where a tool is not found
+                                const errorMessage = `Error: Tool '${name}' not found.`;
+                                messages.push({ role: 'tool', name: 'error', content: errorMessage });
+                                renderMessages();
+                                showAlert(errorMessage, 5000);
+                            }
+                        }
+                    } else {
+                        // No tool calls from the LLM, so the loop is complete for this turn.
+                        break;
+                    }
+
+                    loopCount++;
+                }
+            } catch (error) {
+                console.error("Agent error:", error);
+                showAlert("An unexpected error occurred. Please try again.", 5000);
+            } finally {
+                isProcessing = false;
+                sendButton.disabled = false;
+                userInput.disabled = false;
+                userInput.focus();
+            }
+        }
+
+        // Event listener for the send button and enter key
+        sendButton.addEventListener('click', () => {
+            const userMessage = userInput.value.trim();
+            if (userMessage) {
+                runAgent(userMessage);
+                userInput.value = ''; // Clear input field after sending
+            }
+        });
+
+        userInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault(); // Prevents a new line
+                sendButton.click();
+            }
+        });
+
+        // Initial rendering of the messages
+        renderMessages();
+    </script>
+</body>
+</html>
